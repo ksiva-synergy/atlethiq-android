@@ -20,4 +20,7 @@ interface MetricSampleDao {
 
     @Query("SELECT * FROM metric_samples WHERE metricType = :metricType AND startTime >= :startTime AND startTime <= :endTime ORDER BY startTime ASC")
     suspend fun getMetricSamplesForSparkline(metricType: String, startTime: Long, endTime: Long): List<MetricSample>
+
+    @Query("SELECT * FROM metric_samples ORDER BY startTime ASC")
+    suspend fun getAllMetricSamplesSync(): List<MetricSample>
 }

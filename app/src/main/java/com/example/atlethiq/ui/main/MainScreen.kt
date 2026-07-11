@@ -142,9 +142,9 @@ fun MainScreen(
         ) {
             when (selectedTab) {
                 BottomTab.TODAY -> TodayScreen(todayViewModel = todayViewModel)
-                BottomTab.TRENDS -> TrendsScreen()
-                BottomTab.LOG -> LogScreen()
-                BottomTab.SOURCES -> SourcesScreen()
+                BottomTab.TRENDS -> TrendsScreen(todayViewModel = todayViewModel)
+                BottomTab.LOG -> LogScreen(todayViewModel = todayViewModel)
+                BottomTab.SOURCES -> SourcesScreen(todayViewModel = todayViewModel)
             }
         }
     }

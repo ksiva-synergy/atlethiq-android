@@ -1,5 +1,6 @@
 package com.example.atlethiq.ui.screens
 
+import android.graphics.Typeface
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -9,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,20 +23,56 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.atlethiq.data.LogHistoryRow
+import com.example.atlethiq.data.SourceSummary
+import com.example.atlethiq.data.TrendsChartData
 import com.example.atlethiq.data.models.DailySnapshot
+import com.example.atlethiq.domain.dedup.PlaceholderDedupConfig
 import com.example.atlethiq.theme.*
 import com.example.atlethiq.theme.Text as ColorText
 import com.example.atlethiq.ui.viewmodel.TodayViewModel
+import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisGuidelineComponent
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottomAxis
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStartAxis
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineSpec
+import com.patrykandpatrick.vico.compose.cartesian.marker.rememberDefaultCartesianMarker
+import com.patrykandpatrick.vico.core.cartesian.marker.DefaultCartesianMarker
+import com.patrykandpatrick.vico.core.cartesian.data.AxisValueOverrider
+import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.compose.common.ProvideVicoTheme
+import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
+import com.patrykandpatrick.vico.compose.common.of
+import com.patrykandpatrick.vico.compose.common.shader.color
+import com.patrykandpatrick.vico.compose.m3.common.rememberM3VicoTheme
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
+import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
+import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
+import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
+import com.patrykandpatrick.vico.core.common.Dimensions
+import com.patrykandpatrick.vico.core.common.shader.DynamicShader
+import com.patrykandpatrick.vico.core.common.shape.Shape as VicoShape
+import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
+import com.patrykandpatrick.vico.core.cartesian.Scroll
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -847,23 +885,623 @@ fun DecodeBottomSheet(
     }
 }
 
+// =============================================================================
+// TRENDS
+// =============================================================================
+
 @Composable
-fun TrendsScreen() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Trends Tab Placeholder", style = Typography.bodyLarge, color = ColorText)
+fun TrendsScreen(todayViewModel: TodayViewModel) {
+    val trendsData by todayViewModel.trendsData.collectAsState()
+    val snapshot by todayViewModel.currentSnapshot.collectAsState()
+    val dayIndex by todayViewModel.dayIndex.collectAsState()
+
+    TabScreen(title = "Trends", todayViewModel = todayViewModel) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            DriftStatusLine(snapshot)
+
+            val data = trendsData
+            if (data == null) {
+                Text("Loading trends…", style = Typography.bodyLarge, color = Muted)
+            } else {
+                val i = (dayIndex - 1).coerceIn(0, data.dates.size - 1)
+
+                TrendChartCard(
+                    eyebrow = "HRV · 7D VS 30D BASELINE",
+                    currentValueLabel = "${data.hrv7d.getOrElse(i) { 0.0 }.toInt()} ms",
+                    dates = data.dates,
+                    inkValues = data.hrv7d,
+                    baselineValues = data.hrv30dBaseline,
+                    selectedIndex = dayIndex,
+                    inkColor = ElectricCyan
+                )
+
+                TrendChartCard(
+                    eyebrow = "RESTING HEART RATE",
+                    currentValueLabel = "${data.rhr7d.getOrElse(i) { 0.0 }.toInt()} bpm",
+                    dates = data.dates,
+                    inkValues = data.rhr7d,
+                    baselineValues = data.rhr30dBaseline,
+                    selectedIndex = dayIndex,
+                    inkColor = ElectricCyan
+                )
+
+                SleepChartCard(
+                    dates = data.dates,
+                    sleepHours = data.sleepHours,
+                    needHours = data.sleepNeedHours,
+                    selectedIndex = dayIndex,
+                    currentValueLabel = "${"%.1f".format(data.sleepHours.getOrElse(i) { 0.0 })} h"
+                )
+
+                TrendChartCard(
+                    eyebrow = "LOAD · DIRECTIONAL",
+                    currentValueLabel = "${data.load7d.getOrElse(i) { 0.0 }.toInt()} u",
+                    dates = data.dates,
+                    inkValues = data.load7d,
+                    baselineValues = data.load28dWeeklyAvg,
+                    selectedIndex = dayIndex,
+                    inkColor = ElectricCyan
+                )
+            }
+        }
     }
 }
 
 @Composable
-fun LogScreen() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Log Tab Placeholder", style = Typography.bodyLarge, color = ColorText)
+fun DriftStatusLine(snapshot: DailySnapshot?) {
+    val debug = remember(snapshot?.debugJson) {
+        try {
+            snapshot?.debugJson?.let { Json.parseToJsonElement(it).jsonObject }
+        } catch (e: Exception) {
+            null
+        }
+    }
+    val driftRising = debug?.get("drift_rising")?.jsonPrimitive?.booleanOrNull ?: false
+    val sagDays = debug?.get("consecutive_sag_days")?.jsonPrimitive?.doubleOrNull?.toInt() ?: 0
+
+    val copy = if (driftRising) {
+        "Drift: rising — $sagDays days of load outpacing recovery"
+    } else {
+        "Drift: none — recovery is keeping pace with load"
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (driftRising) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(FlagOrange)
+            )
+        }
+        Text(
+            text = copy,
+            style = Typography.bodyLarge,
+            color = if (driftRising) FlagOrange else Muted
+        )
     }
 }
 
 @Composable
-fun SourcesScreen() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Sources Tab Placeholder", style = Typography.bodyLarge, color = ColorText)
+private fun ChartCardShell(
+    eyebrow: String,
+    currentValueLabel: String,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = Shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = Surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = eyebrow, style = Typography.labelLarge, color = Muted)
+                Text(text = currentValueLabel, style = Typography.bodySmall, color = ElectricCyan)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            content()
+        }
+    }
+}
+
+/**
+ * Zooms the y-axis to the data's actual range (with padding) instead of Vico's default zero-based
+ * range. Zero values are excluded from the range calculation: early calibration days have no
+ * 30-day rolling window yet, so the engine reports a 0.0 placeholder baseline for them — treating
+ * that as real data would flatten the whole chart down to a sliver near the top.
+ */
+private fun paddedYRange(vararg lists: List<Double>?): AxisValueOverrider {
+    val all = lists.filterNotNull().flatten().filter { it > 0.0 }
+    if (all.isEmpty()) return AxisValueOverrider.auto()
+    val min = all.min()
+    val max = all.max()
+    val padding = ((max - min) * 0.15).coerceAtLeast(1.0)
+    val step = if (max > 200) 10.0 else 1.0
+    val lo = (Math.floor((min - padding) / step) * step).coerceAtLeast(0.0)
+    val hi = Math.ceil((max + padding) / step) * step
+    return AxisValueOverrider.fixed(minY = lo.toFloat(), maxY = hi.toFloat())
+}
+
+private fun dateLabelFor(dates: List<String>, x: Float): String {
+    val index = (x.toInt() - 1).coerceIn(0, dates.size - 1)
+    return try {
+        LocalDate.parse(dates[index]).format(DateTimeFormatter.ofPattern("M/d"))
+    } catch (e: Exception) {
+        ""
+    }
+}
+
+@Composable
+private fun rememberTodayMarker(color: Color) = rememberDefaultCartesianMarker(
+    label = rememberTextComponent(
+        color = Base,
+        textSize = 11.sp,
+        background = rememberShapeComponent(shape = VicoShape.Pill, color = color),
+        padding = Dimensions.of(6.dp, 3.dp),
+        typeface = Typeface.MONOSPACE
+    ),
+    labelPosition = DefaultCartesianMarker.LabelPosition.AroundPoint,
+    guideline = rememberAxisGuidelineComponent(color = color, shape = VicoShape.Rectangle)
+)
+
+@Composable
+fun TrendChartCard(
+    eyebrow: String,
+    currentValueLabel: String,
+    dates: List<String>,
+    inkValues: List<Double>,
+    baselineValues: List<Double>?,
+    selectedIndex: Int,
+    inkColor: Color
+) {
+    ChartCardShell(eyebrow = eyebrow, currentValueLabel = currentValueLabel) {
+        val modelProducer = remember { CartesianChartModelProducer.build() }
+        LaunchedEffect(inkValues, baselineValues) {
+            modelProducer.runTransaction {
+                lineSeries {
+                    series(x = inkValues.indices.map { it + 1 }, y = inkValues)
+                    if (baselineValues != null) {
+                        series(x = baselineValues.indices.map { it + 1 }, y = baselineValues)
+                    }
+                }
+            }
+        }
+
+        ProvideVicoTheme(rememberM3VicoTheme(lineColor = Line, textColor = Muted)) {
+            CartesianChartHost(
+                modifier = Modifier.fillMaxWidth().height(160.dp),
+                modelProducer = modelProducer,
+                scrollState = rememberVicoScrollState(
+                    initialScroll = remember(selectedIndex) { Scroll.Absolute.x(selectedIndex.toFloat(), bias = 0.5f) }
+                ),
+                chart = rememberCartesianChart(
+                    rememberLineCartesianLayer(
+                        lines = listOfNotNull(
+                            rememberLineSpec(shader = DynamicShader.color(inkColor), backgroundShader = null),
+                            if (baselineValues != null) {
+                                rememberLineSpec(shader = DynamicShader.color(Line), backgroundShader = null)
+                            } else null
+                        ),
+                        axisValueOverrider = paddedYRange(inkValues, baselineValues)
+                    ),
+                    startAxis = rememberStartAxis(guideline = rememberAxisGuidelineComponent(color = Line)),
+                    bottomAxis = rememberBottomAxis(
+                        guideline = null,
+                        valueFormatter = CartesianValueFormatter { value, _, _ -> dateLabelFor(dates, value) }
+                    ),
+                    persistentMarkers = mapOf(selectedIndex.toFloat() to rememberTodayMarker(inkColor))
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun SleepChartCard(
+    dates: List<String>,
+    sleepHours: List<Double>,
+    needHours: Double,
+    selectedIndex: Int,
+    currentValueLabel: String
+) {
+    ChartCardShell(eyebrow = "SLEEP · DURATION VS NEED", currentValueLabel = currentValueLabel) {
+        val modelProducer = remember { CartesianChartModelProducer.build() }
+        val needLine = remember(sleepHours, needHours) { List(sleepHours.size) { needHours } }
+        LaunchedEffect(sleepHours, needHours) {
+            modelProducer.runTransaction {
+                columnSeries { series(x = sleepHours.indices.map { it + 1 }, y = sleepHours) }
+                lineSeries { series(x = needLine.indices.map { it + 1 }, y = needLine) }
+            }
+        }
+
+        ProvideVicoTheme(rememberM3VicoTheme(lineColor = Line, textColor = Muted)) {
+            CartesianChartHost(
+                modifier = Modifier.fillMaxWidth().height(160.dp),
+                modelProducer = modelProducer,
+                scrollState = rememberVicoScrollState(
+                    initialScroll = remember(selectedIndex) { Scroll.Absolute.x(selectedIndex.toFloat(), bias = 0.5f) }
+                ),
+                chart = rememberCartesianChart(
+                    rememberColumnCartesianLayer(
+                        columnProvider = ColumnCartesianLayer.ColumnProvider.series(
+                            listOf(rememberLineComponent(color = ElectricCyan, thickness = 6.dp, shape = VicoShape.rounded(30)))
+                        )
+                    ),
+                    rememberLineCartesianLayer(
+                        lines = listOf(rememberLineSpec(shader = DynamicShader.color(Line), backgroundShader = null))
+                    ),
+                    startAxis = rememberStartAxis(guideline = rememberAxisGuidelineComponent(color = Line)),
+                    bottomAxis = rememberBottomAxis(
+                        guideline = null,
+                        valueFormatter = CartesianValueFormatter { value, _, _ -> dateLabelFor(dates, value) }
+                    ),
+                    persistentMarkers = mapOf(selectedIndex.toFloat() to rememberTodayMarker(ElectricCyan))
+                )
+            )
+        }
+    }
+}
+
+// =============================================================================
+// LOG
+// =============================================================================
+
+private val FeelOptions = listOf("Fresh" to "felt_fresh", "Normal" to "normal", "Flat" to "felt_flat", "Wrecked" to "felt_wrecked")
+
+@Composable
+fun LogScreen(todayViewModel: TodayViewModel) {
+    val history by todayViewModel.logHistory.collectAsState()
+    val submitting by todayViewModel.logSubmitting.collectAsState()
+    val snapshot by todayViewModel.currentSnapshot.collectAsState()
+    val showDecodeSheet by todayViewModel.showDecodeSheet.collectAsState()
+    val debugMode by todayViewModel.debugMode.collectAsState()
+
+    var rpe by remember { mutableStateOf<Int?>(null) }
+    var feel by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf("") }
+
+    TabScreen(title = "Log", todayViewModel = todayViewModel) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = Shapes.medium,
+                colors = CardDefaults.cardColors(containerColor = Surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(text = "How did today feel?", style = Typography.titleMedium, color = ColorText)
+
+                    RpeSelector(value = rpe, onChange = { rpe = it })
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FeelOptions.forEach { (label, raw) ->
+                            FeelChip(label = label, selected = feel == raw, onClick = { feel = if (feel == raw) null else raw })
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        placeholder = { Text("Add a note (optional)", color = Muted) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = ColorText,
+                            unfocusedTextColor = ColorText,
+                            focusedBorderColor = Line,
+                            unfocusedBorderColor = Line,
+                            cursorColor = SignalLime
+                        )
+                    )
+
+                    Text(
+                        text = "Your read is the label the model learns from.",
+                        style = Typography.bodySmall.copy(fontSize = 12.sp),
+                        color = Muted
+                    )
+
+                    Button(
+                        onClick = {
+                            todayViewModel.logManualEntry(rpe, feel, note.ifBlank { null })
+                            rpe = null
+                            feel = null
+                            note = ""
+                        },
+                        enabled = rpe != null && !submitting,
+                        colors = ButtonDefaults.buttonColors(containerColor = SignalLime, contentColor = Base),
+                        shape = Shapes.small,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (submitting) "Logging…" else "Log it", fontFamily = Inter, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+
+            Text(text = "HISTORY", style = Typography.labelLarge, color = Muted)
+
+            if (history.isEmpty()) {
+                Text("No entries yet.", style = Typography.bodyLarge, color = Muted)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    history.forEach { row ->
+                        LogHistoryRowCard(row) {
+                            todayViewModel.selectDayByDate(row.date)
+                            todayViewModel.setShowDecodeSheet(true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showDecodeSheet && snapshot != null) {
+        DecodeBottomSheet(
+            snapshot = snapshot!!,
+            onDismiss = { todayViewModel.setShowDecodeSheet(false) },
+            debugMode = debugMode,
+            onSeeRawInputs = { todayViewModel.setShowDecodeSheet(false) }
+        )
+    }
+}
+
+@Composable
+fun RpeSelector(value: Int?, onChange: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = "RPE", style = Typography.labelLarge, color = Muted)
+            Text(
+                text = value?.toString() ?: "—",
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+                color = if (value != null) lerp(ElectricCyan, FlagOrange, (value - 1) / 9f) else Muted
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            (1..10).forEach { i ->
+                val filled = value != null && i <= value
+                val segmentColor = if (filled) lerp(ElectricCyan, FlagOrange, (i - 1) / 9f) else SurfaceRaised
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(segmentColor)
+                        .border(1.dp, if (filled) Color.Transparent else Line, RoundedCornerShape(4.dp))
+                        .clickable { onChange(i) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = i.toString(),
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                        color = if (filled) Base else Muted
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FeelChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) SignalLime else Color.Transparent)
+            .border(1.dp, if (selected) SignalLime else Line, RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = label,
+            style = Typography.bodySmall.copy(fontSize = 13.sp),
+            color = if (selected) Base else ColorText
+        )
+    }
+}
+
+@Composable
+fun LogHistoryRowCard(row: LogHistoryRow, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = Shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = Surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = row.date, fontFamily = JetBrainsMono, color = ColorText, fontSize = 14.sp)
+                CallPill(call = row.call)
+            }
+            if (row.sessionSummary != null) {
+                Text(text = row.sessionSummary, style = Typography.bodySmall, color = Muted)
+            }
+            if (row.feelLabel != null || row.rpe != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (row.rpe != null) {
+                        Text(text = "RPE ${row.rpe}", fontFamily = JetBrainsMono, fontSize = 12.sp, color = Muted)
+                    }
+                    if (row.feelLabel != null) {
+                        FeelChip(label = row.feelLabel, selected = false, onClick = {})
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CallPill(call: String) {
+    val (label, color) = when (call) {
+        "go" -> "Go" to SignalLime
+        "hold" -> "Hold" to ElectricCyan
+        "back_off" -> "Back off" to FlagOrange
+        "calibrating" -> "Calibrating" to Muted
+        else -> "No data" to Muted
+    }
+    Box(
+        modifier = Modifier
+            .border(1.dp, color, RoundedCornerShape(12.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(text = label, style = Typography.labelLarge.copy(fontSize = 11.sp), color = color)
+    }
+}
+
+// =============================================================================
+// SOURCES
+// =============================================================================
+
+@Composable
+fun SourcesScreen(todayViewModel: TodayViewModel) {
+    val sources by todayViewModel.sourceSummaries.collectAsState()
+    val dateString by todayViewModel.dateString.collectAsState()
+    val attributionRows = remember { todayViewModel.attributionRows() }
+
+    TabScreen(title = "Sources", todayViewModel = todayViewModel) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Mock feed · as of $dateString",
+                fontFamily = JetBrainsMono,
+                fontSize = 12.sp,
+                color = Muted
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                sources.forEach { source ->
+                    SourceCard(source)
+                }
+            }
+
+            Text(text = "WHO WINS WHAT", style = Typography.labelLarge, color = Muted)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = Shapes.medium,
+                colors = CardDefaults.cardColors(containerColor = Surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    attributionRows.forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${row.metricLabel} ← ${row.winner}",
+                                fontFamily = JetBrainsMono,
+                                fontSize = 13.sp,
+                                color = ColorText
+                            )
+                            if (row.dedupedNote != null) {
+                                Text(
+                                    text = row.dedupedNote,
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 11.sp,
+                                    color = Muted
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "When two sources report the same thing, the higher-priority source wins. Everything is kept; one is trusted.",
+                        style = Typography.bodySmall.copy(fontSize = 11.sp),
+                        color = Muted
+                    )
+                    Text(
+                        text = "Placeholder priority config — the real config-driven dedup resolver lands in M6.",
+                        style = Typography.bodySmall.copy(fontSize = 11.sp),
+                        color = FlagOrange
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SourceCard(source: SourceSummary) {
+    val dotColor = when {
+        source.neverConnected -> Muted
+        source.flowingToday -> SignalLime
+        else -> FlagOrange
+    }
+    val lastDataLabel = source.lastDataAtMillis?.let {
+        val instant = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC)
+        instant.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'"))
+    } ?: "Never"
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = Shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = Surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(dotColor)
+                )
+                Text(
+                    text = PlaceholderDedupConfig.sourceDisplayName(source.sourceApp),
+                    style = Typography.titleMedium,
+                    color = ColorText
+                )
+            }
+            Text(text = "Last data: $lastDataLabel", fontFamily = JetBrainsMono, fontSize = 12.sp, color = Muted)
+            if (source.dataTypeChips.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    source.dataTypeChips.forEach { chip ->
+                        Box(
+                            modifier = Modifier
+                                .border(1.dp, Line, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(text = chip.uppercase(), style = Typography.bodySmall.copy(fontSize = 10.sp), color = Muted)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
