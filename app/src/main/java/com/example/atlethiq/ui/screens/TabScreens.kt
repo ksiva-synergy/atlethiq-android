@@ -171,17 +171,37 @@ fun TabScreen(
             val currentDayIndex by todayViewModel.dayIndex.collectAsState()
             
             if (debugMode) {
-                Box(
+                Column(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(16.dp)
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // The daily-loop mechanism: advance the frontier one day and let the WorkManager
+                    // job detect the new snapshot and fire the notification (no direct-post shortcut).
+                    Button(
+                        onClick = { todayViewModel.advanceSimulatedDay() },
+                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceRaised, contentColor = FlagOrange),
+                        shape = Shapes.small
+                    ) {
+                        Text("Simulate morning data arrival", fontFamily = JetBrainsMono, fontSize = 12.sp)
+                    }
+                    // Repositions the frontier to (selected day − 1) so the next simulate lands on the
+                    // selected day and fires its Call — lets any state be reached in one advance.
+                    Button(
+                        onClick = { todayViewModel.armSimulationAtSelectedDay() },
+                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceRaised, contentColor = Muted),
+                        shape = Shapes.small
+                    ) {
+                        Text("Arm arrival at day $currentDayIndex", fontFamily = JetBrainsMono, fontSize = 12.sp)
+                    }
                     Button(
                         onClick = { showDayPicker = true },
                         colors = ButtonDefaults.buttonColors(containerColor = SurfaceRaised, contentColor = SignalLime),
                         shape = Shapes.small
                     ) {
-                        Text("Select Day: $currentDayIndex", fontFamily = JetBrainsMono)
+                        Text("Select Day: $currentDayIndex", fontFamily = JetBrainsMono, fontSize = 12.sp)
                     }
                 }
             }

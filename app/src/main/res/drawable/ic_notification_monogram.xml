@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Atlethiq "A" monogram. White silhouette; the system tints the status-bar icon. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M12,4 L4,20 L7,20 L8.6,16.4 L15.4,16.4 L17,20 L20,20 Z M12,8.2 L14.4,13.8 L9.6,13.8 Z" />
+</vector>

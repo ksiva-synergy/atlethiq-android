@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.atlethiq.theme.Base
 import com.example.atlethiq.theme.Line
@@ -50,6 +53,15 @@ fun MainScreen(
 ) {
     var selectedTab by remember { mutableStateOf(BottomTab.TODAY) }
     val snapshot by todayViewModel.currentSnapshot.collectAsState()
+
+    // A tapped notification lands here: consume the pending day on resume (covers cold + warm start)
+    // and jump to the Today tab scoped to that day.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        todayViewModel.handlePendingNotificationDeepLink()
+    }
+    LaunchedEffect(Unit) {
+        todayViewModel.navToTodayForDay.collect { selectedTab = BottomTab.TODAY }
+    }
     
     val indicatorColor = remember(snapshot) {
         when (snapshot?.call) {

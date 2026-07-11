@@ -1,5 +1,24 @@
 # Changelog
 
+## [Milestone 4] - 2026-07-11
+
+Built the daily loop and morning notification per design spec §6 (execution-plan-v2 §B M4), against the existing 45-day seeded mock history — no Health Connect, no real overnight sync.
+
+Introduced a persisted `AppStateStore` (SharedPreferences) that models the daily loop on mock data: `frontierDay` is the app's current latest-with-data day (what Today opens on — defaulting to the latest real snapshot, day 44, so M2/M3's open-on-latest behavior is preserved), and `lastNotifiedDay` guards against posting more than once per day. A `MorningCallWorker` (`CoroutineWorker`, dependencies pulled through a Hilt `EntryPoint` so the default WorkManager factory constructs it — no `hilt-work` needed) fires the notification: it reads the **real** persisted snapshot for the frontier day and posts only if the frontier has advanced past `lastNotifiedDay` **and** a Call (go/hold/back_off) actually exists — never blind, and calibrating/no_data days are skipped. The worker is enqueued on every app open, so reopening on an already-notified day runs the job and it no-ops (frontier ≤ lastNotified). `CallNotifier` builds one variant per Call state — title carries the verbatim Call verb ("The Call: Go hard." / "Hold." / "Back off."), body is the state's one-line Decode summary, accent color bound to the state's ink (lime/cyan/orange), a white "A" monogram small icon (`ic_notification_monogram`), no image, no actions, and a fixed notification id so a later post replaces any earlier one (at most one visible). Tapping a notification carries the day as an intent extra; `MainActivity` (`singleTop`) persists it to `pendingNotifDay`, and `MainScreen` consumes it on resume — scoping Today to that day and forcing the Today tab (covers both cold and warm start). Added the `POST_NOTIFICATIONS` permission with a runtime request, and the channel is created in `AtlethiqApplication`.
+
+Since there is no real overnight sync on mock data, the debug layer (behind the flask, alongside the day-picker) gains two controls: **"Simulate morning data arrival"** advances the frontier one day and enqueues the WorkManager job — the actual daily-loop mechanism, not a direct-post shortcut — and **"Arm arrival at day N"** repositions the frontier to (selected day − 1) so the next simulate lands on any chosen day and fires its Call, making every state reachable in one advance without walking the whole seed.
+
+Also completed the obsolete scaffold `FakeMyModelRepository` in `MainScreenViewModelTest` (it had stopped compiling when M3 widened the `DataRepository` interface) so `testDebugUnitTest` is green again.
+
+### Verification Results
+Verified end-to-end on the emulator with real screenshots and adb/logcat evidence (not descriptions):
+- **Go** (day 27, 2026-06-22): armed then simulated; logcat `MorningCallWorker: new data detected for day 27 (2026-06-22) call=go — posting notification`; shade showed "The Call: Go hard." / "You're recovered and trending up. Today's the day to push." with a lime-tinted "A" monogram.
+- **Hold** (day 42, 2026-07-07): logcat confirmed `call=hold — posting notification`; shade showed "The Call: Hold." / "You're steady, not surging. Train — but don't chase a peak today." with a cyan-tinted monogram.
+- **Back off** (day 34, 2026-06-29): logcat confirmed `call=back_off — posting notification`; shade showed "The Call: Back off." / "Recovery hasn't caught up with this week's load. Easy day — details inside." with an orange-tinted monogram. Each new post replaced the prior one (single fixed id).
+- **WorkManager path (not a bypass):** every post was preceded by the worker's `run start: frontierDay=N lastNotifiedDay=N-1` → `new data detected` → `notification posted; lastNotifiedDay advanced to N` log sequence.
+- **Deep link:** from the Trends tab on day 1, tapping the Hold notification switched to the Today tab scoped to day 42 (TUE 07 JUL).
+- **No re-fire:** reopening the app on day 42 (frontier=42, lastNotified=42) logged `no new day beyond lastNotified (42 <= 42) — skip, not re-firing`; `dumpsys notification` reported 0 posted Atlethiq notifications. First launch likewise pins lastNotified to the latest real day, so no notification fires blind for pre-existing data.
+
 ## [Milestone 3] - 2026-07-11
 
 Built Trends, Log, and Sources per design spec §5.4–§5.6, against the existing 45-day seeded mock history (execution-plan-v2 §B M3) — no Health Connect, no real ingestion.
