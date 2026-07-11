@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -15,6 +18,15 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        val localProperties = Properties().apply {
+            val file = rootProject.file("local.properties")
+            if (file.exists()) {
+                FileInputStream(file).use { load(it) }
+            }
+        }
+        resValue("string", "SUPABASE_URL", localProperties.getProperty("SUPABASE_URL") ?: "https://placeholder-url.supabase.co")
+        resValue("string", "SUPABASE_ANON_KEY", localProperties.getProperty("SUPABASE_ANON_KEY") ?: "placeholder-key")
     }
 
     buildTypes {
@@ -32,6 +44,7 @@ android {
       aidl = false
       buildConfig = false
       shaders = false
+      resValues = true
     }
 
     packaging {

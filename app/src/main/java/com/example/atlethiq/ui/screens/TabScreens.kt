@@ -65,7 +65,7 @@ fun TabScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Base,
                     titleContentColor = ColorText
                 )

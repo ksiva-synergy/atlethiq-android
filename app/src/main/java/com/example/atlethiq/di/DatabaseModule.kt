@@ -29,7 +29,7 @@ object DatabaseModule {
             context,
             AtlethiqDatabase::class.java,
             "atlethiq_database"
-        ).fallbackToDestructiveMigration().build()
+        ).fallbackToDestructiveMigration(dropAllTables = true).build()
     }
 
     @Provides
@@ -50,9 +50,10 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideSupabaseClient(@ApplicationContext context: Context): SupabaseClient {
-        // Read from resources if present, otherwise use placeholder
-        val supabaseUrl = "https://placeholder-url.supabase.co"
-        val supabaseKey = "placeholder-key"
+        val urlResId = context.resources.getIdentifier("SUPABASE_URL", "string", context.packageName)
+        val keyResId = context.resources.getIdentifier("SUPABASE_ANON_KEY", "string", context.packageName)
+        val supabaseUrl = if (urlResId != 0) context.getString(urlResId) else "https://placeholder-url.supabase.co"
+        val supabaseKey = if (keyResId != 0) context.getString(keyResId) else "placeholder-key"
         
         return createSupabaseClient(
             supabaseUrl = supabaseUrl,
