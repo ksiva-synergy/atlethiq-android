@@ -9,6 +9,7 @@ import io.github.jan.supabase.auth.providers.builtin.Email
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.example.atlethiq.data.SupabaseConnectivityCheck
 import javax.inject.Inject
 
 sealed interface AuthState {
@@ -32,6 +33,7 @@ class AuthViewModel @Inject constructor(
                 val currentSession = supabaseClient.auth.currentSessionOrNull()
                 if (currentSession != null) {
                     _authState.value = AuthState.Authenticated
+                    SupabaseConnectivityCheck.verifyTables(supabaseClient)
                 }
             } catch (e: Exception) {
                 // Ignore
@@ -48,6 +50,7 @@ class AuthViewModel @Inject constructor(
                     this.password = emailPasswordText
                 }
                 _authState.value = AuthState.Authenticated
+                SupabaseConnectivityCheck.verifyTables(supabaseClient)
             } catch (e: Exception) {
                 _authState.value = AuthState.Error(e.message ?: "Authentication failed")
             }
