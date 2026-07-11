@@ -38,6 +38,7 @@ import com.example.atlethiq.theme.SignalLime
 import com.example.atlethiq.theme.SpaceGrotesk
 import com.example.atlethiq.theme.Text as ColorText
 import com.example.atlethiq.theme.Typography
+import com.example.atlethiq.BuildConfig
 import com.example.atlethiq.ui.viewmodel.AuthState
 import com.example.atlethiq.ui.viewmodel.AuthViewModel
 
@@ -47,8 +48,8 @@ fun LoginScreen(
     modifier: Modifier = Modifier
 ) {
     val authState by authViewModel.authState.collectAsState()
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf(BuildConfig.MOCK_USER_EMAIL) }
+    var password by remember { mutableStateOf(BuildConfig.MOCK_USER_PASSWORD) }
 
     Box(
         modifier = modifier

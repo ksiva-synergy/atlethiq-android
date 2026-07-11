@@ -27,6 +27,8 @@ android {
         }
         resValue("string", "SUPABASE_URL", localProperties.getProperty("SUPABASE_URL") ?: "https://placeholder-url.supabase.co")
         resValue("string", "SUPABASE_ANON_KEY", localProperties.getProperty("SUPABASE_ANON_KEY") ?: "placeholder-key")
+        buildConfigField("String", "MOCK_USER_EMAIL", "\"${localProperties.getProperty("MOCK_USER_EMAIL") ?: ""}\"")
+        buildConfigField("String", "MOCK_USER_PASSWORD", "\"${localProperties.getProperty("MOCK_USER_PASSWORD") ?: ""}\"")
     }
 
     buildTypes {
@@ -42,7 +44,7 @@ android {
     buildFeatures {
       compose = true
       aidl = false
-      buildConfig = false
+      buildConfig = true
       shaders = false
       resValues = true
     }

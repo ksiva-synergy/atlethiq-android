@@ -64,4 +64,18 @@ object DatabaseModule {
             install(Functions)
         }
     }
+
+    @Provides
+    @Singleton
+    fun provideDataRepository(
+        dailySnapshotDao: DailySnapshotDao,
+        metricSampleDao: MetricSampleDao,
+        supabaseClient: SupabaseClient
+    ): com.example.atlethiq.data.DataRepository {
+        return com.example.atlethiq.data.DefaultDataRepository(
+            dailySnapshotDao,
+            metricSampleDao,
+            supabaseClient
+        )
+    }
 }

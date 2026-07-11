@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,16 +24,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.atlethiq.theme.Base
 import com.example.atlethiq.theme.Line
 import com.example.atlethiq.theme.Muted
 import com.example.atlethiq.theme.SignalLime
+import com.example.atlethiq.theme.ElectricCyan
+import com.example.atlethiq.theme.FlagOrange
 import com.example.atlethiq.theme.Text as ColorText
 import com.example.atlethiq.theme.Typography
 import com.example.atlethiq.ui.screens.LogScreen
 import com.example.atlethiq.ui.screens.SourcesScreen
 import com.example.atlethiq.ui.screens.TodayScreen
 import com.example.atlethiq.ui.screens.TrendsScreen
+import com.example.atlethiq.ui.viewmodel.TodayViewModel
 
 enum class BottomTab {
     TODAY, TRENDS, LOG, SOURCES
@@ -40,9 +45,20 @@ enum class BottomTab {
 
 @Composable
 fun MainScreen(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    todayViewModel: TodayViewModel = viewModel()
 ) {
     var selectedTab by remember { mutableStateOf(BottomTab.TODAY) }
+    val snapshot by todayViewModel.currentSnapshot.collectAsState()
+    
+    val indicatorColor = remember(snapshot) {
+        when (snapshot?.call) {
+            "go" -> SignalLime
+            "hold" -> ElectricCyan
+            "back_off" -> FlagOrange
+            else -> SignalLime
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -100,7 +116,7 @@ fun MainScreen(
                                         .padding(top = 4.dp)
                                         .fillMaxWidth(0.3f)
                                         .height(3.dp)
-                                        .background(SignalLime) // Today's ink (Signal Lime)
+                                        .background(indicatorColor)
                                 )
                             } else {
                                 Box(
@@ -125,7 +141,7 @@ fun MainScreen(
                 .padding(innerPadding)
         ) {
             when (selectedTab) {
-                BottomTab.TODAY -> TodayScreen()
+                BottomTab.TODAY -> TodayScreen(todayViewModel = todayViewModel)
                 BottomTab.TRENDS -> TrendsScreen()
                 BottomTab.LOG -> LogScreen()
                 BottomTab.SOURCES -> SourcesScreen()
